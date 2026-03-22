@@ -60,7 +60,7 @@ def prepare_reference_audio(audio_path: str | Path) -> PreparedAudio:
         raise ValueError("参照音声が長すぎます。30 秒以下、できれば 3〜5 秒に切り出してください。")
 
     waveform, sample_rate = librosa.load(str(audio_path), sr=None, mono=True)
-    waveform = waveform.astype(np.float32)
+    waveform = np.clip(waveform.astype(np.float32), -1.0, 1.0)
 
     if sample_rate <= 0 or waveform.size == 0:
         raise ValueError("参照音声を読み取れませんでした。3〜5 秒ほどの音声ファイルを指定してください。")
@@ -72,6 +72,7 @@ def prepare_reference_audio(audio_path: str | Path) -> PreparedAudio:
     trimmed_waveform, trim_index = librosa.effects.trim(waveform, top_db=30)
     if trimmed_waveform.size == 0:
         raise ValueError("発話区間を検出できませんでした。無音ではない参照音声を指定してください。")
+    trimmed_waveform = np.clip(trimmed_waveform.astype(np.float32), -1.0, 1.0)
 
     leading_silence = float(trim_index[0] / sample_rate) if sample_rate else 0.0
     trailing_silence = float((len(waveform) - trim_index[1]) / sample_rate) if sample_rate else 0.0

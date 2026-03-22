@@ -45,12 +45,20 @@ def build_demo(config: AppConfig) -> gr.Blocks:
     qwen_service = QwenTTSService(config)
     whisper_service = WhisperService(config)
 
-    def reset_reference_state(audio_path: str | None) -> tuple[str, tuple[int, object] | None, str, str, str, None, str, str]:
+    def _hidden_download_button() -> dict[str, object]:
+        return gr.update(value=None, visible=False)
+
+    def _ready_download_button(output_path: str) -> dict[str, object]:
+        return gr.update(value=output_path, visible=True)
+
+    def reset_reference_state(
+        audio_path: str | None,
+    ) -> tuple[str, tuple[int, object] | None, str, str, str, None, str, str, dict[str, object]]:
         if not audio_path:
             message = "参照音声が未入力です。"
         else:
             message = "参照音声が変更されました。参照テキストと診断結果を更新するには、再度 Whisper を実行してください。"
-        return "", None, "", message, "", None, "", ""
+        return "", None, "", message, "", None, "", "", _hidden_download_button()
 
     def bind_ref_text_to_audio(audio_path: str | None, ref_text: str) -> str:
         if not audio_path or not ref_text.strip():
@@ -62,15 +70,15 @@ def build_demo(config: AppConfig) -> gr.Blocks:
             return ""
         return prepared.cache_key
 
-    def clear_generation_state() -> tuple[None, str, str]:
-        return None, "", ""
+    def clear_generation_state() -> tuple[None, str, str, dict[str, object]]:
+        return None, "", "", _hidden_download_button()
 
     def transcribe_reference(
         audio_path: str | None,
         language: str,
-    ) -> tuple[str, tuple[int, object] | None, str, str, str, None, str, str]:
+    ) -> tuple[str, tuple[int, object] | None, str, str, str, None, str, str, dict[str, object]]:
         if not audio_path:
-            return "", None, "参照音声をアップロードするか、マイクで録音してください。", "参照音声が未入力です。", "", None, "", ""
+            return "", None, "参照音声をアップロードするか、マイクで録音してください。", "参照音声が未入力です。", "", None, "", "", _hidden_download_button()
 
         try:
             if config.unload_tts_before_asr:
@@ -85,7 +93,17 @@ def build_demo(config: AppConfig) -> gr.Blocks:
             )
             if whisper_service.load_note:
                 status = f"{status} / {whisper_service.load_note}"
-            return asr_result.text, prepared.as_gradio_audio(), report, status, prepared.cache_key, None, "", ""
+            return (
+                asr_result.text,
+                prepared.as_gradio_audio(),
+                report,
+                status,
+                prepared.cache_key,
+                None,
+                "",
+                "",
+                _hidden_download_button(),
+            )
         except Exception as exc:
             return (
                 "",
@@ -96,6 +114,7 @@ def build_demo(config: AppConfig) -> gr.Blocks:
                 None,
                 "",
                 "",
+                _hidden_download_button(),
             )
 
     def synthesize(
@@ -112,18 +131,18 @@ def build_demo(config: AppConfig) -> gr.Blocks:
         top_k: int,
         top_p: float,
         repetition_penalty: float,
-    ) -> tuple[tuple[int, object] | None, str, str]:
+    ) -> tuple[str | None, str, str, dict[str, object]]:
         if not audio_path:
-            return None, "", "参照音声が未入力です。"
+            return None, "", "参照音声が未入力です。", _hidden_download_button()
 
         if not target_text or not target_text.strip():
-            return None, "", "読み上げる本文を入力してください。"
+            return None, "", "読み上げる本文を入力してください。", _hidden_download_button()
 
         if not x_vector_only_mode and not ref_text.strip():
             return None, "", (
                 "ICL モードでは参照テキストが必須です。"
                 " Whisper で文字起こししてから、必要なら修正して使ってください。"
-            )
+            ), _hidden_download_button()
 
         try:
             prepared = prepare_reference_audio(audio_path)
@@ -131,8 +150,8 @@ def build_demo(config: AppConfig) -> gr.Blocks:
                 return None, "", (
                     "### 合成エラー\n"
                     "- 参照音声が変更されました。Whisper を再実行するか、参照テキストを現在の音声に合わせて入れ直してください。"
-                )
-            output_path, output_audio, summary = qwen_service.generate(
+                ), _hidden_download_button()
+            output_path, output_audio_path, summary = qwen_service.generate(
                 model_id=model_id,
                 prepared=prepared,
                 ref_text=ref_text,
@@ -146,11 +165,11 @@ def build_demo(config: AppConfig) -> gr.Blocks:
                 repetition_penalty=repetition_penalty,
                 use_prompt_cache=use_prompt_cache,
             )
-            return output_audio, output_path, summary
+            return output_audio_path, output_path, summary, _ready_download_button(output_path)
         except Exception as exc:
-            return None, "", f"### 合成エラー\n- {type(exc).__name__}: {exc}"
+            return None, "", f"### 合成エラー\n- {type(exc).__name__}: {exc}", _hidden_download_button()
 
-    def clear_runtime_cache() -> tuple[str, None, str, str]:
+    def clear_runtime_cache() -> tuple[str, None, str, str, dict[str, object]]:
         whisper_service.release()
         qwen_service.release()
         qwen_service.clear_prompt_cache()
@@ -159,6 +178,7 @@ def build_demo(config: AppConfig) -> gr.Blocks:
             None,
             "",
             "",
+            _hidden_download_button(),
         )
 
     with gr.Blocks(title="Qwen3-TTS Voice Clone Studio") as demo:
@@ -174,6 +194,15 @@ Windows + Docker Compose + NVIDIA GPU 前提で使う、日本語向けの Qwen3
         )
         gr.Markdown(
             """
+**使い方**
+1. 参照音声を入れる
+2. Whisper で文字起こしして確認する
+3. 読み上げたい本文を入れる
+4. 合成して、必要ならダウンロードする
+"""
+        )
+        gr.Markdown(
+            """
 **重要メモ**
 - 参照音声は 3〜5 秒、単一話者、BGM なし、長い無音なしが有利です。
 - `x_vector_only_mode` は参照テキストなしでも動きますが、公式に品質低下が明記されています。
@@ -184,19 +213,19 @@ Windows + Docker Compose + NVIDIA GPU 前提で使う、日本語向けの Qwen3
         with gr.Row():
             with gr.Column(scale=6):
                 reference_audio = gr.Audio(
-                    label="1. 参照音声",
+                    label="1. 参照音声を入れる",
                     sources=["upload", "microphone"],
                     type="filepath",
                 )
                 reference_preview = gr.Audio(label="前処理後プレビュー", interactive=False)
-                transcribe_button = gr.Button("参照音声を解析して Whisper で文字起こし")
+                transcribe_button = gr.Button("2. 文字起こしを作成して確認")
                 transcription_language = gr.Dropdown(
                     label="Whisper 文字起こし言語ヒント",
                     choices=ASR_LANGUAGE_CHOICES,
                     value="Japanese",
                 )
                 ref_text = gr.Textbox(
-                    label="2. 参照テキスト",
+                    label="2. 参照テキストを確認",
                     lines=4,
                     placeholder="Whisper 文字起こし後、必ず内容を確認して修正してください。",
                 )
@@ -209,9 +238,17 @@ Windows + Docker Compose + NVIDIA GPU 前提で使う、日本語向けの Qwen3
                     lines=8,
                     placeholder="ここに日本語テキストを入力します。",
                 )
-                synth_button = gr.Button("4. Qwen3-TTS で音声合成", variant="primary")
+                gr.Markdown("合成すると `outputs/` に自動保存されます。別の場所へ持っていくときは合成後のダウンロードボタンを使ってください。")
+                synth_button = gr.Button("4. 音声を合成する", variant="primary")
                 generated_audio = gr.Audio(label="合成音声", interactive=False)
-                saved_path = gr.Textbox(label="保存先", interactive=False)
+                with gr.Row():
+                    download_button = gr.DownloadButton(
+                        label="WAV をダウンロード",
+                        value=None,
+                        visible=False,
+                        variant="secondary",
+                    )
+                saved_path = gr.Textbox(label="自動保存先", interactive=False)
                 generation_report = gr.Markdown()
 
         with gr.Accordion("詳細設定", open=False):
@@ -305,6 +342,7 @@ Windows + Docker Compose + NVIDIA GPU 前提で使う、日本語向けの Qwen3
                 generated_audio,
                 saved_path,
                 generation_report,
+                download_button,
             ],
         )
         ref_text.change(
@@ -315,57 +353,57 @@ Windows + Docker Compose + NVIDIA GPU 前提で使う、日本語向けの Qwen3
         ref_text.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         target_text.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         model_id.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         synthesis_language.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         x_vector_only_mode.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         use_prompt_cache.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         max_new_tokens.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         temperature.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         top_k.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         top_p.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         repetition_penalty.change(
             fn=clear_generation_state,
             inputs=[],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         transcribe_button.click(
             fn=transcribe_reference,
@@ -379,6 +417,7 @@ Windows + Docker Compose + NVIDIA GPU 前提で使う、日本語向けの Qwen3
                 generated_audio,
                 saved_path,
                 generation_report,
+                download_button,
             ],
         )
         synth_button.click(
@@ -398,12 +437,12 @@ Windows + Docker Compose + NVIDIA GPU 前提で使う、日本語向けの Qwen3
                 top_p,
                 repetition_penalty,
             ],
-            outputs=[generated_audio, saved_path, generation_report],
+            outputs=[generated_audio, saved_path, generation_report, download_button],
         )
         clear_cache_button.click(
             fn=clear_runtime_cache,
             inputs=[],
-            outputs=[clear_cache_status, generated_audio, saved_path, generation_report],
+            outputs=[clear_cache_status, generated_audio, saved_path, generation_report, download_button],
         )
 
     demo.queue(default_concurrency_limit=1)

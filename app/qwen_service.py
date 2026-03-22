@@ -6,6 +6,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import soundfile as sf
 import torch
 from qwen_tts import Qwen3TTSModel
@@ -134,7 +135,7 @@ class QwenTTSService:
         top_p: float,
         repetition_penalty: float,
         use_prompt_cache: bool,
-    ) -> tuple[str, tuple[int, object], str]:
+    ) -> tuple[str, str, str]:
         with self._lock:
             self.ensure_loaded(model_id)
             assert self._model is not None
@@ -184,22 +185,24 @@ class QwenTTSService:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         output_name = f"{timestamp}_{_safe_filename(target_text[:24])}.wav"
         output_path = output_dir / output_name
-        sf.write(output_path, wavs[0], sample_rate)
+        output_waveform = np.clip(np.asarray(wavs[0], dtype=np.float32), -1.0, 1.0)
+        sf.write(output_path, output_waveform, sample_rate)
 
         summary = "\n".join(
             [
                 "### 合成結果",
-                f"- 保存先: `{output_path}`",
+                f"- 自動保存先: `{output_path}`",
                 f"- モデル: `{model_id}`",
                 f"- 言語: `{language}`",
                 f"- `x_vector_only_mode`: `{x_vector_only_mode}`",
                 f"- Promptキャッシュ: {'有効' if use_prompt_cache else '無効'}",
+                "- 合成後は `outputs/` に自動保存されます。別の場所へ置きたいときは UI のダウンロードボタンを使ってください。",
                 f"- メモ: {note}",
                 f"- ロード情報: {self.load_note}",
             ]
         )
 
-        return str(output_path), (sample_rate, wavs[0]), summary
+        return str(output_path), str(output_path), summary
 
     def clear_prompt_cache(self) -> str:
         with self._lock:

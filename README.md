@@ -128,6 +128,7 @@ GRADIO_SSL_KEYFILE=/data/certs/server.key
 ## 保存先とキャッシュ
 
 - 合成した WAV は作業フォルダの `outputs/` に保存されます
+- UI のダウンロードボタンを押すと、任意の保存先へ別途ダウンロードできます
 - UI に出る `/data/outputs/...` はコンテナ内パスですが、実体はこの `outputs/` フォルダです
 - Hugging Face のモデルキャッシュは Docker volume `hf-cache` に保持されます
 - 初回は数十 GB 単位で Docker Desktop のディスクを使うことがあるので、容量に余裕を持たせてください
