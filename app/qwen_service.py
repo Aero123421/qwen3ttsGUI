@@ -60,6 +60,7 @@ class QwenTTSService:
                     model_id,
                     device_map=self.config.qwen_device,
                     dtype=dtype,
+                    torch_dtype=dtype,
                     attn_implementation=attn_impl,
                 )
                 self._load_note = f"モデルを `{model_id}` として読み込みました。attention: `{attn_impl or 'default'}`"
@@ -70,6 +71,7 @@ class QwenTTSService:
                     model_id,
                     device_map=self.config.qwen_device,
                     dtype=dtype,
+                    torch_dtype=dtype,
                 )
                 self._load_note = (
                     f"`{attn_impl}` でのロードに失敗したため標準attentionへフォールバックしました。"

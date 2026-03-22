@@ -32,7 +32,11 @@ class PreparedAudio:
         return self.waveform.astype(np.float32), int(self.sample_rate)
 
     def as_gradio_audio(self) -> tuple[int, np.ndarray]:
-        return int(self.sample_rate), self.waveform.astype(np.float32)
+        # Gradio preview prefers PCM-like integer arrays and otherwise warns
+        # about implicit float32 -> int16 conversion on every render.
+        pcm16 = np.clip(self.waveform, -1.0, 1.0)
+        pcm16 = (pcm16 * 32767.0).astype(np.int16)
+        return int(self.sample_rate), pcm16
 
 
 def _dbfs(value: float) -> float:

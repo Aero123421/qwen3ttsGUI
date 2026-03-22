@@ -17,6 +17,7 @@ def main() -> None:
     launch_kwargs: dict[str, object] = {
         "server_name": config.server_name,
         "server_port": config.server_port,
+        "allowed_paths": [config.output_dir],
     }
     if config.ssl_certfile:
         launch_kwargs["ssl_certfile"] = config.ssl_certfile
