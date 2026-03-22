@@ -11,8 +11,16 @@ if not exist ".env" (
 set "PORT=7860"
 for /f "tokens=2 delims==" %%A in ('findstr /b "GRADIO_SERVER_PORT=" ".env" 2^>nul') do set "PORT=%%A"
 
-echo [INFO] Starting Qwen3-TTS GUI with Docker Compose...
-docker compose up --build -d
+set "IMAGE_NAME=qwen3-tts-app-qwen3-tts-web:latest"
+
+docker image inspect "%IMAGE_NAME%" >nul 2>nul
+if errorlevel 1 (
+    echo [INFO] First startup detected. Building Docker image...
+    docker compose up --build -d
+) else (
+    echo [INFO] Starting Qwen3-TTS GUI with Docker Compose...
+    docker compose up -d
+)
 
 if errorlevel 1 (
     echo [ERROR] Failed to start Docker Compose.
